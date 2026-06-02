@@ -8,7 +8,7 @@ res = re.split(r'([,.:;?_!"()\']|--|\s)', raw_text) # First split the text by pu
 result = [item.strip() for item in res if item.strip()] # Keep items that are not whitespace
 
 all_tokens = sorted(set(result)) # Get unique tokens
-new_tokens = ["<|EOS|>", "<|UNK|>"] # S[ecial tokens for end of sentence and unknown words 
+new_tokens = ["<|EOS|>", "<|UNK|>"] # Special tokens for end of sentence and unknown words 
 all_tokens.extend(new_tokens) # Add special tokens to the list of all tokens
 
 
