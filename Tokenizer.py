@@ -1,4 +1,5 @@
 import re
+import tiktoken
 
 with open("the-verdict.txt", "r", encoding="utf-8") as file:
     raw_text = file.read() # Contains the entire text
@@ -33,6 +34,15 @@ class Tokenizer:
         return tokens # Join the tokens into a single string
 
 Tokenizer = Tokenizer(vocab) # Create an instance of the Tokenizer class with the vocabulary
-txt = "The day is pretty nice, abhi" # Example text to encode
+txt = "The day is pretty nice, abhi" # Example text
 en = Tokenizer.encode(txt)
 dc = Tokenizer.decode(en)
+
+
+
+gpt_tokenizer = tiktoken.get_encoding("gpt2")
+en_gpt = gpt_tokenizer.encode(txt)
+dc_gpt = gpt_tokenizer.decode(en_gpt)
+print("GPT Tokenizer:")
+print("Encoded:", en_gpt)   
+print("Decoded:", dc_gpt)
