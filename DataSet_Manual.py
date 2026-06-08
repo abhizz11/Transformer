@@ -43,12 +43,29 @@ def create_dataloader(txt, batch_size=4, max_length=256, stride=128, shuffle=Tru
 
 dataloader = create_dataloader(
     raw_text, 
-    batch_size=1,
+    batch_size=8,
     max_length=4,
-    stride=1,
+    stride=4,
     shuffle=False
 )
 
+max_length = 4
 data_iter = iter(dataloader)
-first_batch = next(data_iter)
-print(first_batch)
+inputs, targets = next(data_iter)
+vocab = 50257
+output_dim = 256 
+
+token_embedding_layer = torch.nn.Embedding(vocab, output_dim)
+token_embeddings = token_embedding_layer(inputs)
+print(token_embeddings.shape)
+print(token_embeddings)
+
+context_length = max_length
+pos_embedding_layer = torch.nn.Embedding(context_length, output_dim)
+
+pos_embeddings = pos_embedding_layer(torch.arange(max_length))
+print(pos_embeddings.shape)
+
+input_embedding = pos_embeddings + token_embeddings
+print(input_embedding)
+print(input_embedding.shape)
