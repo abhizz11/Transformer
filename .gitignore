@@ -2,3 +2,5 @@ requirements.txt
 __pycache__/
 Tokenizer.ipynb
 Attention mechanism.ipynb
+Attention mechanism-checkpoint.ipynb
+.ipynb_checkpoints/Attention mechanism-checkpoint.ipynb
