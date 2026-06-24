@@ -12,6 +12,7 @@ GPT_CONFIG_124M = {
     "qkv_bias": False # Query-key-value bias  
 }
 
+# Just a dummy class for now
 class DummyGPTModel(nn.Module):
     def __init__(self, cfg):
         super().__init__()
@@ -67,7 +68,45 @@ class LayerNorm(nn.Module):
         mean = x.mean(dim=-1, keepdim=True)
         var = x.var(dim=-1, keepdim=True, unbiased=False) # unbiased = False so that we divide by n instead of n - 1
         norm_x = (x - mean) / torch.sqrt(var + self.eps)
-        return self.scale * norm_x + self.shift         
+        return self.scale * norm_x + self.shift   
+
+# GELU Class
+class GELU(nn.Module):
+    '''
+    GELU (Gaussian Error Linear Unit) is a mathematical smoothing of ReLU.
+    ReLU turns off a neuron if it's negative, crushing it to zero. GELU is 
+    a mathematical smoothing of ReLU. The smooth transition allows the model 
+    to retain a tiny bit of uncertainty for negative values, making LLM tra-
+    ining more stable.
+    '''
+    def __init__():
+        super().__init__()
+
+    def forward(self, x):
+        return 0.5 * x * torch.tanh(
+            torch.sqrt(torch.tensor(2.0 / torch.pi)) *
+            (x + 0.004715 * torch.pow(x,3))
+        )      
+
+# Feed Forward class
+class FeedForward(nn.module):
+    '''
+    MHA figures out which tokens are related to each other, FFN retrieves stroed concepts
+    learned during training and injects them into the token. FFN works in isolation, ignoring
+    the sequence completely, and applies math to every single token individually.
+
+    Expand ==> Filter (GELU) ==> Compress
+    '''
+    def __init__(self, cfg):
+        super().__init__()
+        self.layers = nn.Sequential(
+            nn.Linear(cfg["emb_dim"], 4 * cfg["emb_dim"]), # Expanding the dimension by 4
+            GELU(), # Smoothening the negative neurons
+            nn.Linear(4 * cfg["emb_dim"], cfg["emb_dim"]), # Compressing back to the size
+        )
+    def forward(self, x):
+        return self.layers(x)
+
 
 tokenizer = tiktoken.get_encoding("gpt2")
 batch = []
@@ -83,3 +122,9 @@ torch.manual_seed(123)
 model = DummyGPTModel(GPT_CONFIG_124M)
 logits = model(batch)
 print(logits.shape)
+
+# Instance of ffn
+ffn = FeedForward(GPT_CONFIG_124M)
+x = torch.ran(2, 3, 768)
+out = ffn(x)
+print(out.shape) # should be [2,3,768] after expansion and compression
