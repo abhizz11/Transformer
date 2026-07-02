@@ -56,7 +56,7 @@ class DummyTransformerBlock(nn.Module):
 class LayerNorm(nn.Module):
     '''
     The goal of this class is to force input to have a mean of 0 and a variance of 1.
-    Forcing the layers to do that, prevents the vanishing gradient problem.
+    Forcing the layers to do that, prevents the vanishing gradient problem.  Without normalization some gradients either shrink to zero (learning stops entirely) or explode to infinity, causing the loss to register as a NaN (not a number). LayerNormalization provides stability
     '''
     def __init__(self, emb_dim):
         super().__init__()
@@ -79,7 +79,7 @@ class GELU(nn.Module):
     to retain a tiny bit of uncertainty for negative values, making LLM tra-
     ining more stable.
     '''
-    def __init__():
+    def __init__(self):
         super().__init__()
 
     def forward(self, x):
@@ -89,7 +89,7 @@ class GELU(nn.Module):
         )      
 
 # Feed Forward class
-class FeedForward(nn.module):
+class FeedForward(nn.Module):
     '''
     MHA figures out which tokens are related to each other, FFN retrieves stroed concepts
     learned during training and injects them into the token. FFN works in isolation, ignoring
@@ -108,6 +108,49 @@ class FeedForward(nn.module):
         return self.layers(x)
 
 
+# Example neural network for shortcut connections
+class DeepNeuralNetwork(nn.Module):
+    '''
+    Shortcut, Residual connections prevent vanishing gradient problem. When we backpropagate without shortcut connections, the final layer can shrink down to a microscopic value like 0.000002. If the gradient is near zero, the weights in the earlier layers barely update. This bottlenecks the entire network and we can't train properly.
+    '''
+    def __init__(self, layer_sizes, use_shortcut):
+        super().__init__()
+        self.use_shortcut = use_shortcut
+        self.layers = nn.ModuleList([
+            nn.Sequential(nn.Linear(layer_sizes[0], layer_sizes[1]), GELU()),
+            nn.Sequential(nn.Linear(layer_sizes[1], layer_sizes[2]), GELU()),
+            nn.Sequential(nn.Linear(layer_sizes[2], layer_sizes[3]), GELU()),
+            nn.Sequential(nn.Linear(layer_sizes[3], layer_sizes[4]), GELU()),
+            nn.Sequential(nn.Linear(layer_sizes[4], layer_sizes[5]), GELU())
+        ])
+
+    def forward(self, x):
+        for layer in self.layers:
+            # Compute the output for current layer
+            layer_output = layer(x)
+            if self.use_shortcut and x.shape == layer_output.shape:
+                x = x + layer_output # h(x) = x + f(x)
+            else:
+                x = layer_output
+        
+        return x
+
+# function to print gradients
+def print_gradients(model, x):
+    output = model(x)
+    target = torch.tensor([[0.]])
+
+    # calculate loss based on how close the target and output are
+    loss = nn.MSELoss()
+    loss = loss(output, target)
+
+    loss.backward() # backward pass
+
+    for name, param in model.named_parameters():
+        if 'weight' in name:
+            print(f"{name} has gradient mean of {param.grad.abs().mean().item()}")
+
+
 tokenizer = tiktoken.get_encoding("gpt2")
 batch = []
 txt1 = "Every effort moves you"
@@ -121,10 +164,33 @@ print(batch)
 torch.manual_seed(123)
 model = DummyGPTModel(GPT_CONFIG_124M)
 logits = model(batch)
-print(logits.shape)
+# print(logits.shape)
 
-# Instance of ffn
-ffn = FeedForward(GPT_CONFIG_124M)
-x = torch.ran(2, 3, 768)
-out = ffn(x)
-print(out.shape) # should be [2,3,768] after expansion and compression
+# # Instance of ffn
+# ffn = FeedForward(GPT_CONFIG_124M)
+# x = torch.ran(2, 3, 768)
+# out = ffn(x)
+# print(out.shape) # should be [2,3,768] after expansion and compression
+
+# Instance for shortcut connections in Neural Network
+layer_sizes = [3, 3, 3, 3, 3, 1]
+sample_input = torch.tensor([[1., 0., -1.]])
+model_without_shortcut = DeepNeuralNetwork(
+layer_sizes, use_shortcut=False
+)
+print_gradients(model_without_shortcut, sample_input)
+# Outputs:
+# layers.0.0.weight has gradient mean of 1.1759034350689035e-06
+# layers.1.0.weight has gradient mean of 3.0806938866589917e-06
+# layers.2.0.weight has gradient mean of 7.358218681474682e-06
+# layers.3.0.weight has gradient mean of 0.000168326630955562
+# layers.4.0.weight has gradient mean of 0.00635495176538825
+
+model_with_shortcut = DeepNeuralNetwork(layer_sizes, use_shortcut=True)
+print_gradients(model_with_shortcut, sample_input)
+# Outputs:
+# layers.0.0.weight has gradient mean of 0.00030286217224784195
+# layers.1.0.weight has gradient mean of 0.0005237706936895847
+# layers.2.0.weight has gradient mean of 0.00045960216084495187
+# layers.3.0.weight has gradient mean of 0.00032706503407098353
+# layers.4.0.weight has gradient mean of 0.01308580581098795
