@@ -144,85 +144,38 @@ class GPTModel(nn.Module):
         return logits 
 
 
-# Example neural network for shortcut connections
-class DeepNeuralNetwork(nn.Module):
-    '''
-    Shortcut, Residual connections prevent vanishing gradient problem. When we backpropagate without shortcut connections, the final layer can shrink down to a microscopic value like 0.000002. If the gradient is near zero, the weights in the earlier layers barely update. This bottlenecks the entire network and we can't train properly.
-    '''
-    def __init__(self, layer_sizes, use_shortcut):
-        super().__init__()
-        self.use_shortcut = use_shortcut
-        self.layers = nn.ModuleList([
-            nn.Sequential(nn.Linear(layer_sizes[0], layer_sizes[1]), GELU()),
-            nn.Sequential(nn.Linear(layer_sizes[1], layer_sizes[2]), GELU()),
-            nn.Sequential(nn.Linear(layer_sizes[2], layer_sizes[3]), GELU()),
-            nn.Sequential(nn.Linear(layer_sizes[3], layer_sizes[4]), GELU()),
-            nn.Sequential(nn.Linear(layer_sizes[4], layer_sizes[5]), GELU())
-        ])
-
-    def forward(self, x):
-        for layer in self.layers:
-            # Compute the output for current layer
-            layer_output = layer(x)
-            if self.use_shortcut and x.shape == layer_output.shape:
-                x = x + layer_output # h(x) = x + f(x)
-            else:
-                x = layer_output
+def generate(model, idx, max_new_tokens, context_size):
+    # loop runs until max_new_tokens have been generated
+    for _ in range(max_new_tokens):
+        idx_cond = idx[:, -context_size:] # Only works on the context size window
         
-        return x
+        # Need torch.no_grad() for training phase but not for generation
+        with torch.no_grad():
+            logits = model(idx_cond)
+        
+        logits = logits[:, -1, :] # Last row of logits
 
-# function to print gradients
-def print_gradients(model, x):
-    output = model(x)
-    target = torch.tensor([[0.]])
+        probs = torch.softmax(logits, dim = -1) # Probability sampling
+        idx_next = torch.argmax(probs, dim=-1, keepdim=True) # Choose the max token
 
-    # calculate loss based on how close the target and output are
-    loss = nn.MSELoss()
-    loss = loss(output, target)
+        idx = torch.cat((idx, idx_next), dim=1) # Append it for next token generation
 
-    loss.backward() # backward pass
-
-    for name, param in model.named_parameters():
-        if 'weight' in name:
-            print(f"{name} has gradient mean of {param.grad.abs().mean().item()}")
-
+    return idx # Return at the end
 
 tokenizer = tiktoken.get_encoding("gpt2")
-batch = []
-txt1 = "Every effort moves you"
-txt2 = "Every day holds a"
-batch.append(torch.tensor(tokenizer.encode(txt1)))
-batch.append(torch.tensor(tokenizer.encode(txt2)))
-batch = torch.stack(batch, dim=0)
-print(batch)
 
 # GPT MODEL
 model = GPTModel(GPT_CONFIG_124M)
-out = model(batch)
-print("Input batch:\n", batch)
-print("\nOutput shape:", out.shape)
-print(out)
+prompt = "Hey"
+model.eval()
+encode = tokenizer.encode(prompt)
+print("Encoded text: ", encode)
+output = generate(
+    model = model,
+    idx = torch.tensor(encode).unsqueeze(0),
+    max_new_tokens=5,
+    context_size=GPT_CONFIG_124M["context_length"]
+    )
 
-'''
-layer_sizes = [3, 3, 3, 3, 3, 1]
-sample_input = torch.tensor([[1., 0., -1.]])
-model_without_shortcut = DeepNeuralNetwork(
-layer_sizes, use_shortcut=False
-)
-print_gradients(model_without_shortcut, sample_input)
-# Outputs:
-# layers.0.0.weight has gradient mean of 1.1759034350689035e-06
-# layers.1.0.weight has gradient mean of 3.0806938866589917e-06
-# layers.2.0.weight has gradient mean of 7.358218681474682e-06
-# layers.3.0.weight has gradient mean of 0.000168326630955562
-# layers.4.0.weight has gradient mean of 0.00635495176538825
-
-model_with_shortcut = DeepNeuralNetwork(layer_sizes, use_shortcut=True)
-print_gradients(model_with_shortcut, sample_input)
-# Outputs:
-# layers.0.0.weight has gradient mean of 0.00030286217224784195
-# layers.1.0.weight has gradient mean of 0.0005237706936895847
-# layers.2.0.weight has gradient mean of 0.00045960216084495187
-# layers.3.0.weight has gradient mean of 0.00032706503407098353
-# layers.4.0.weight has gradient mean of 0.01308580581098795
-'''
+print(output)
+print(tokenizer.decode(output.squeeze(0).tolist()))
