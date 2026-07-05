@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import tiktoken
+import multiheadedattention as mha
 
 GPT_CONFIG_124M = {
     "vocab_size": 50257, # Size of Model's vocab
@@ -43,13 +44,47 @@ class DummyGPTModel(nn.Module):
         logits = self.out_head(x)
         return logits 
 
-# Just a dummy class for now 
-class DummyTransformerBlock(nn.Module):
+# Transformer Block
+class TransformerBlock(nn.Module):
+    '''
+    Inside a transformer block, the input tensor is normalized, and processed by a multiheaded causal 
+    attention. This attention output undergoes dropout and is added back to the original un-normalized
+    input via a residual, shortcut connection to preserve gradient flow. The updated tensor is 
+    normalized again before it passes through FFN, which expands and contracts its dimensions to
+    capture non-linear relationships. Next, we do a second round of dropout and shortcut connections to
+    produce an enriched context vector.   
+    '''
     def __init__(self, cfg):
         super().__init__()
-        # A simple placeholder 
+        self.att = mha.MultiHeadAttention(
+            d_in = cfg["emb_dim"],
+            d_out = cfg["emb_dim"],
+            context_length=cfg["context_length"],
+            num_heads = cfg["n_heads"],
+            dropout = cfg["drop_rate"]
+            qkv_bias=cfg["qkv_bias"]
+        )
+        self.ff = FeedForward(cfg) # Expand
+        self.norm1 = LayerNorm(cfg["emb_dim"]) # Normalize
+        self.norm2 = LayerNorm[cfg["emb_dim"]] # Normalize
+        self.drop_shortcut = nn.Dropout(cfg["drop_rate"]) # Dropout
+
     
     def forward(self, x):
+        # Shortcut connection for attention block
+        shortcut = x
+        x = self.norm1(x)
+        x = self.att(x) # Shape changes and comes back after multihead attention
+        x = self.drop_shortcut(x)
+        x = x + shortcut # Add the original input back 
+
+        # Shortcut connection for Feed forward block
+        shortcut = x
+        x = self.norm2(x)
+        x = self.ff(x) 
+        x = self.drop_shortcut(x)
+        x = x + shortcut # Add the original input back
+
         return x 
 
 # Normalization class
