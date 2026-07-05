@@ -13,80 +13,6 @@ GPT_CONFIG_124M = {
     "qkv_bias": False # Query-key-value bias  
 }
 
-# Just a dummy class for now
-class DummyGPTModel(nn.Module):
-    def __init__(self, cfg):
-        super().__init__()
-        self.tok_emb = nn.Embedding(cfg["vocab_size"], cfg["emb_dim"]) # Create an embedding matrix of 50527 words and 768 dimensions
-        self.pos_emb = nn.Embedding(cfg["context_length"], cfg["emb_dim"]) # At any given time, we can only process context words
-        self.drop_emb = nn.Dropout(cfg["drop_rate"]) # 10% drop rate
-
-        # Just a placeholder for Transformer Block
-        self.trf_blocks = nn.Sequential(
-            *[DummyTransformerBlock(cfg) for _ in range(cfg["n_layers"])]
-        )
-        
-        # Just a placeholder for LayerNorm
-        self.final_norm = LayerNorm(cfg["emb_dim"])
-        self.out_head = nn.Linear(
-            cfg["emb_dim"], cfg["vocab_size"], bias=False
-        )
-
-    def forward(self, in_idx):
-        batch_size, seq_len = in_idx.shape
-        tok_embeds = self.tok_emb(in_idx)
-        pos_embeds = self.pos_emb(torch.arange(seq_len, device=in_idx.device))
-        x = tok_embeds + pos_embeds
-        x = self.drop_emb(x)
-        x = self.trf_blocks(x)
-        x = self.final_norm(x)
-
-        logits = self.out_head(x)
-        return logits 
-
-# Transformer Block
-class TransformerBlock(nn.Module):
-    '''
-    Inside a transformer block, the input tensor is normalized, and processed by a multiheaded causal 
-    attention. This attention output undergoes dropout and is added back to the original un-normalized
-    input via a residual, shortcut connection to preserve gradient flow. The updated tensor is 
-    normalized again before it passes through FFN, which expands and contracts its dimensions to
-    capture non-linear relationships. Next, we do a second round of dropout and shortcut connections to
-    produce an enriched context vector.   
-    '''
-    def __init__(self, cfg):
-        super().__init__()
-        self.att = mha.MultiHeadAttention(
-            d_in = cfg["emb_dim"],
-            d_out = cfg["emb_dim"],
-            context_length=cfg["context_length"],
-            num_heads = cfg["n_heads"],
-            dropout = cfg["drop_rate"]
-            qkv_bias=cfg["qkv_bias"]
-        )
-        self.ff = FeedForward(cfg) # Expand
-        self.norm1 = LayerNorm(cfg["emb_dim"]) # Normalize
-        self.norm2 = LayerNorm[cfg["emb_dim"]] # Normalize
-        self.drop_shortcut = nn.Dropout(cfg["drop_rate"]) # Dropout
-
-    
-    def forward(self, x):
-        # Shortcut connection for attention block
-        shortcut = x
-        x = self.norm1(x)
-        x = self.att(x) # Shape changes and comes back after multihead attention
-        x = self.drop_shortcut(x)
-        x = x + shortcut # Add the original input back 
-
-        # Shortcut connection for Feed forward block
-        shortcut = x
-        x = self.norm2(x)
-        x = self.ff(x) 
-        x = self.drop_shortcut(x)
-        x = x + shortcut # Add the original input back
-
-        return x 
-
 # Normalization class
 class LayerNorm(nn.Module):
     '''
@@ -142,6 +68,81 @@ class FeedForward(nn.Module):
     def forward(self, x):
         return self.layers(x)
 
+# Transformer Block
+class TransformerBlock(nn.Module):
+    '''
+    Inside a transformer block, the input tensor is normalized, and processed by a multiheaded causal 
+    attention. This attention output undergoes dropout and is added back to the original un-normalized
+    input via a residual, shortcut connection to preserve gradient flow. The updated tensor is 
+    normalized again before it passes through FFN, which expands and contracts its dimensions to
+    capture non-linear relationships. Next, we do a second round of dropout and shortcut connections to
+    produce an enriched context vector.   
+    '''
+    def __init__(self, cfg):
+        super().__init__()
+        self.att = mha.MultiHeadAttention(
+            d_in = cfg["emb_dim"],
+            d_out = cfg["emb_dim"],
+            context_length=cfg["context_length"],
+            num_heads = cfg["n_heads"],
+            dropout = cfg["drop_rate"],
+            qkv_bias=cfg["qkv_bias"]
+        )
+        self.ff = FeedForward(cfg) # Expand
+        self.norm1 = LayerNorm(cfg["emb_dim"]) # Normalize
+        self.norm2 = LayerNorm(cfg["emb_dim"]) # Normalize
+        self.drop_shortcut = nn.Dropout(cfg["drop_rate"]) # Dropout
+
+    
+    def forward(self, x):
+        # Shortcut connection for attention block
+        shortcut = x
+        x = self.norm1(x)
+        x = self.att(x) # Shape changes and comes back after multihead attention
+        x = self.drop_shortcut(x)
+        x = x + shortcut # Add the original input back 
+
+        # Shortcut connection for Feed forward block
+        shortcut = x
+        x = self.norm2(x)
+        x = self.ff(x) 
+        x = self.drop_shortcut(x)
+        x = x + shortcut # Add the original input back
+
+        return x 
+
+
+# GPT Model class
+class GPTModel(nn.Module):
+    def __init__(self, cfg):
+        super().__init__()
+        self.tok_emb = nn.Embedding(cfg["vocab_size"], cfg["emb_dim"]) # Create an embedding matrix of 50527 words and 768 dimensions
+        self.pos_emb = nn.Embedding(cfg["context_length"], cfg["emb_dim"]) # At any given time, we can only process context words
+        self.drop_emb = nn.Dropout(cfg["drop_rate"]) # 10% drop rate
+
+        # Just a placeholder for Transformer Block
+        self.trf_blocks = nn.Sequential(
+            *[TransformerBlock(cfg) for _ in range(cfg["n_layers"])]
+        )
+        
+        # Layer Normalization
+        self.final_norm = LayerNorm(cfg["emb_dim"])
+        self.out_head = nn.Linear(
+            cfg["emb_dim"], cfg["vocab_size"], bias=False
+        )
+
+    def forward(self, in_idx):
+        batch_size, seq_len = in_idx.shape
+        tok_embeds = self.tok_emb(in_idx)
+        pos_embeds = self.pos_emb(torch.arange(seq_len, device=in_idx.device))
+        x = tok_embeds + pos_embeds
+        x = self.drop_emb(x)
+        x = self.trf_blocks(x)
+        x = self.final_norm(x)
+
+        logits = self.out_head(x)
+        return logits 
+
 
 # Example neural network for shortcut connections
 class DeepNeuralNetwork(nn.Module):
@@ -195,19 +196,14 @@ batch.append(torch.tensor(tokenizer.encode(txt2)))
 batch = torch.stack(batch, dim=0)
 print(batch)
 
-# Instance of DummyGPT
-torch.manual_seed(123)
-model = DummyGPTModel(GPT_CONFIG_124M)
-logits = model(batch)
-# print(logits.shape)
+# GPT MODEL
+model = GPTModel(GPT_CONFIG_124M)
+out = model(batch)
+print("Input batch:\n", batch)
+print("\nOutput shape:", out.shape)
+print(out)
 
-# # Instance of ffn
-# ffn = FeedForward(GPT_CONFIG_124M)
-# x = torch.ran(2, 3, 768)
-# out = ffn(x)
-# print(out.shape) # should be [2,3,768] after expansion and compression
-
-# Instance for shortcut connections in Neural Network
+'''
 layer_sizes = [3, 3, 3, 3, 3, 1]
 sample_input = torch.tensor([[1., 0., -1.]])
 model_without_shortcut = DeepNeuralNetwork(
@@ -229,3 +225,4 @@ print_gradients(model_with_shortcut, sample_input)
 # layers.2.0.weight has gradient mean of 0.00045960216084495187
 # layers.3.0.weight has gradient mean of 0.00032706503407098353
 # layers.4.0.weight has gradient mean of 0.01308580581098795
+'''
