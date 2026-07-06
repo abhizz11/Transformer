@@ -62,8 +62,6 @@ class MultiHeadAttention(nn.Module):
 
 
 
-torch.manual_seed(123)
-
 # Define the tensor with 3 rows and 6 columns
 inputs = torch.tensor(
     [[0.43, 0.15, 0.89, 0.55, 0.87, 0.66],  # Row 1

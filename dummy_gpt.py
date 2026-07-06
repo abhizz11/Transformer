@@ -143,39 +143,84 @@ class GPTModel(nn.Module):
         logits = self.out_head(x)
         return logits 
 
-
+# Simple generate function 
 def generate(model, idx, max_new_tokens, context_size):
     # loop runs until max_new_tokens have been generated
     for _ in range(max_new_tokens):
-        idx_cond = idx[:, -context_size:] # Only works on the context size window
+        idx_cond = idx[:, -context_size:] # Only work on the context size window, trim the excess tokens
         
         # Need torch.no_grad() for training phase but not for generation
         with torch.no_grad():
-            logits = model(idx_cond)
+            logits = model(idx_cond) # P
         
         logits = logits[:, -1, :] # Last row of logits
 
-        probs = torch.softmax(logits, dim = -1) # Probability sampling
-        idx_next = torch.argmax(probs, dim=-1, keepdim=True) # Choose the max token
+        probs = torch.softmax(logits, dim = -1) # Probability sampling on the last row
+        idx_next = torch.argmax(probs, dim=-1, keepdim=True) # Choose the token with max probability
 
         idx = torch.cat((idx, idx_next), dim=1) # Append it for next token generation
 
     return idx # Return at the end
 
+# Text to token id function
+def text_to_token_ids(text, tokenizer):
+    '''
+    Model cannot read Python lists. It can only perform operations on PyTorch Tensors.
+    We use this function to create a bridge between model and the tokenizer, before passing the 
+    input tokens, we convert it to a tensor. The GPT Model However expects a batch instead of 
+    a single tensor, so we are adding a dimension before feeding it to the model.
+    '''
+    encoded = tokenizer.encode(text, allowed_special={'<|endoftext|>'})
+    encoded_tensor = torch.tensor(encoded).unsqueeze(0) # Add dimension
+    return encoded_tensor
+
+# Token id to text function
+def token_ids_to_text(token_ids, tokenizer):
+    '''
+    Removing the introduced batch in text_to_token_ids function and then decoding it to return
+    a python list of texts
+    '''
+    flat = token_ids.squeeze(0) # Remove last dimension
+    return tokenizer.decode(flat.tolist())
+
+
 tokenizer = tiktoken.get_encoding("gpt2")
 
 # GPT MODEL
 model = GPTModel(GPT_CONFIG_124M)
-prompt = "Hey"
+prompt = "Hey How are you"
 model.eval()
 encode = tokenizer.encode(prompt)
 print("Encoded text: ", encode)
 output = generate(
     model = model,
-    idx = torch.tensor(encode).unsqueeze(0),
-    max_new_tokens=5,
+    idx = text_to_token_ids(prompt, tokenizer),
+    max_new_tokens=10,
     context_size=GPT_CONFIG_124M["context_length"]
     )
 
-print(output)
-print(tokenizer.decode(output.squeeze(0).tolist()))
+# print("Output text: ", token_ids_to_text(output, tokenizer)) # Output text:  Hey How are you insulated SEAL spray monarchrecordedcerpt workload Morty rollsAmerican
+
+# Measuring cross-entropy loss
+'''
+We are trying to maximize the probability of generated tokens to be as close to 1 as possible, 
+but working with probabilities is messy, so we use logarithms. However, since probability is 
+between 0 and 1. the logs come out as negative values, so we take the negative log and now the
+problems shifts from maximizing to minimizing. Now, we want the logarithms to be as close to 0 as
+possible. 
+'''
+
+inputs = torch.tensor([[16833, 3626, 6100],   # ["every effort moves",
+                       [40,    1107, 588]])   #  "I really like"]
+
+targets = torch.tensor([[3626, 6100, 345  ],  # [" effort moves you",
+                        [1107,  588, 11311]]) #  " really like chocolate"]
+
+with torch.no_grad():
+    logits = model(inputs)
+
+logits_flat = logits.flatten(0,1)
+targets_flat = targets.flatten()
+
+loss = torch.nn.functional.cross_entropy(logits_flat, targets_flat)
+print(loss)
