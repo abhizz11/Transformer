@@ -5,7 +5,7 @@ import multiheadedattention as mha
 
 GPT_CONFIG_124M = {
     "vocab_size": 50257, # Size of Model's vocab
-    "context_length": 1024, # Words it can process and remember at one time
+    "context_length": 256, # Words it can process and remember at one time
     "emb_dim": 768, # Embedding dimension, (Different meanings of the same word)
     "n_heads": 12, # Number of Attention heads (Different interpretations of the same sequence)
     "n_layers": 12, # Layers in the transforemer

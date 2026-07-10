@@ -2,21 +2,20 @@ import tiktoken
 from torch.utils.data import Dataset, DataLoader
 import torch 
 
-with open("the-verdict.txt", "r", encoding="utf-8") as file:
-    raw_text = file.read() # Contains the entire text
-
-
 class GPTDataSet(Dataset):
-    
+    '''Defines how individual training samples are extracted'''
     def __init__(self, txt, tokenizer, max_length, stride):
         self.input_ids = []
         self.target_ids = []
     
+        # Get encoded text
         tokens = tokenizer.encode(txt, allowed_special={"<|endoftext|>"})
 
+        # Sliding window to iterate over the tokens capturing max tokens at a time
+        # Stride is the number of steps
         for i in range(0, len(tokens) - max_length, stride):
-            input_chunk = tokens[i: i+max_length]
-            target_chunk = tokens[i+1:i+max_length+1]
+            input_chunk = tokens[i: i+max_length] # input
+            target_chunk = tokens[i+1:i+max_length+1] # target, next word prediction
             self.input_ids.append(torch.tensor(input_chunk))
             self.target_ids.append(torch.tensor(target_chunk))
         
@@ -26,46 +25,19 @@ class GPTDataSet(Dataset):
     def __getitem__(self, idx):
         return self.input_ids[idx], self.target_ids[idx]
 
+# Helper function to manage dataset and packages
 def create_dataloader(txt, batch_size=4, max_length=256, stride=128, shuffle=True, drop_last=True, num_workers=0):
     tokenizer = tiktoken.get_encoding("gpt2")
 
-    dataset = GPTDataSet(txt, tokenizer, max_length, stride)
+    dataset = GPTDataSet(txt, tokenizer, max_length, stride) # Dataset objet
 
+    # Dataloader is highly efficient PyTorch data manager
     dataloader = DataLoader(
         dataset, 
-        batch_size=batch_size,
-        shuffle=shuffle,
-        drop_last=drop_last,
+        batch_size=batch_size, # Group (input, target) together so GPU can process simultaneously
+        shuffle=shuffle, # Randomizes the order of batches
+        drop_last=drop_last, # Setting this to True drops undersized batch to prevent tensor shape mismatches
         num_workers=num_workers
     )
 
     return dataloader
-
-dataloader = create_dataloader(
-    raw_text, 
-    batch_size=8,
-    max_length=4,
-    stride=4,
-    shuffle=False
-)
-
-max_length = 4
-data_iter = iter(dataloader)
-inputs, targets = next(data_iter)
-vocab = 50257
-output_dim = 256 
-
-token_embedding_layer = torch.nn.Embedding(vocab, output_dim)
-token_embeddings = token_embedding_layer(inputs)
-print(token_embeddings.shape)
-print(token_embeddings)
-
-context_length = max_length
-pos_embedding_layer = torch.nn.Embedding(context_length, output_dim)
-
-pos_embeddings = pos_embedding_layer(torch.arange(max_length))
-print(pos_embeddings.shape)
-
-input_embedding = pos_embeddings + token_embeddings
-print(input_embedding)
-print(input_embedding.shape)
