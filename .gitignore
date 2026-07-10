@@ -9,3 +9,5 @@ LLM Architecture.ipynb
 LLM Loss function-checkpoint.ipynb
 LLM Loss function.ipynb
 tinystories.py
+LLM Pretraining.ipynb
+train_tiny_stories.py

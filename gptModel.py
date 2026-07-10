@@ -8,7 +8,7 @@ GPT_CONFIG_124M = {
     "context_length": 256, # Words it can process and remember at one time
     "emb_dim": 768, # Embedding dimension, (Different meanings of the same word)
     "n_heads": 12, # Number of Attention heads (Different interpretations of the same sequence)
-    "n_layers": 12, # Layers in the transforemer
+    "n_layers": 12, # Layers in the transformer
     "drop_rate": 0.1, # Percent of neurons to randomly turn off
     "qkv_bias": False # Query-key-value bias  
 }
@@ -44,10 +44,10 @@ class GELU(nn.Module):
         super().__init__()
 
     def forward(self, x):
-        return 0.5 * x * torch.tanh(
+        return 0.5 * x * ( 1 + torch.tanh(
             torch.sqrt(torch.tensor(2.0 / torch.pi)) *
-            (x + 0.004715 * torch.pow(x,3))
-        )      
+            (x + 0.044715 * torch.pow(x,3))
+        ))      
 
 # Feed Forward class
 class FeedForward(nn.Module):
@@ -199,16 +199,9 @@ output = generate(
     context_size=GPT_CONFIG_124M["context_length"]
     )
 
-# print("Output text: ", token_ids_to_text(output, tokenizer)) # Output text:  Hey How are you insulated SEAL spray monarchrecordedcerpt workload Morty rollsAmerican
+print("Output text: ", token_ids_to_text(output, tokenizer)) # Output text:  Hey How are you insulated SEAL spray monarchrecordedcerpt workload Morty rollsAmerican
 
-# Measuring cross-entropy loss
-'''
-We are trying to maximize the probability of generated tokens to be as close to 1 as possible, 
-but working with probabilities is messy, so we use logarithms. However, since probability is 
-between 0 and 1. the logs come out as negative values, so we take the negative log and now the
-problems shifts from maximizing to minimizing. Now, we want the logarithms to be as close to 0 as
-possible. 
-'''
+
 
 inputs = torch.tensor([[16833, 3626, 6100],   # ["every effort moves",
                        [40,    1107, 588]])   #  "I really like"]
