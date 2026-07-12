@@ -183,37 +183,3 @@ def token_ids_to_text(token_ids, tokenizer):
     flat = token_ids.squeeze(0) # Remove last dimension
     return tokenizer.decode(flat.tolist())
 
-
-tokenizer = tiktoken.get_encoding("gpt2")
-
-# GPT MODEL
-model = GPTModel(GPT_CONFIG_124M)
-prompt = "Hey How are you"
-model.eval()
-encode = tokenizer.encode(prompt)
-print("Encoded text: ", encode)
-output = generate(
-    model = model,
-    idx = text_to_token_ids(prompt, tokenizer),
-    max_new_tokens=10,
-    context_size=GPT_CONFIG_124M["context_length"]
-    )
-
-print("Output text: ", token_ids_to_text(output, tokenizer)) # Output text:  Hey How are you insulated SEAL spray monarchrecordedcerpt workload Morty rollsAmerican
-
-
-
-inputs = torch.tensor([[16833, 3626, 6100],   # ["every effort moves",
-                       [40,    1107, 588]])   #  "I really like"]
-
-targets = torch.tensor([[3626, 6100, 345  ],  # [" effort moves you",
-                        [1107,  588, 11311]]) #  " really like chocolate"]
-
-with torch.no_grad():
-    logits = model(inputs)
-
-logits_flat = logits.flatten(0,1)
-targets_flat = targets.flatten()
-
-loss = torch.nn.functional.cross_entropy(logits_flat, targets_flat)
-print(loss)
