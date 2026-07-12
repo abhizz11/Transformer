@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import tiktoken
 import multiheadedattention as mha
 
 GPT_CONFIG_124M = {
@@ -11,7 +12,42 @@ GPT_CONFIG_124M = {
     "drop_rate": 0.1, # Percent of neurons to randomly turn off
     "qkv_bias": False # Query-key-value bias  
 }
-   
+
+# Normalization class
+class LayerNorm(nn.Module):
+    '''
+    The goal of this class is to force input to have a mean of 0 and a variance of 1.
+    Forcing the layers to do that, prevents the vanishing gradient problem.  Without normalization some gradients either shrink to zero (learning stops entirely) or explode to infinity, causing the loss to register as a NaN (not a number). LayerNormalization provides stability
+    '''
+    def __init__(self, emb_dim):
+        super().__init__()
+        self.eps = 1e-5 # To ensure we don't have division by zero errors
+        self.scale = nn.Parameter(torch.ones(emb_dim)) # scale, shift give us the flexibility to "undo" the normalization 
+        self.shift = nn.Parameter(torch.zeros(emb_dim)) # Helps us reshape the distribution
+
+    def forward(self, x):
+        mean = x.mean(dim=-1, keepdim=True)
+        var = x.var(dim=-1, keepdim=True, unbiased=False) # unbiased = False so that we divide by n instead of n - 1
+        norm_x = (x - mean) / torch.sqrt(var + self.eps)
+        return self.scale * norm_x + self.shift   
+
+# GELU Class
+class GELU(nn.Module):
+    '''
+    GELU (Gaussian Error Linear Unit) is a mathematical smoothing of ReLU.
+    ReLU turns off a neuron if it's negative, crushing it to zero. GELU is 
+    a mathematical smoothing of ReLU. The smooth transition allows the model 
+    to retain a tiny bit of uncertainty for negative values, making LLM tra-
+    ining more stable.
+    '''
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        return 0.5 * x * ( 1 + torch.tanh(
+            torch.sqrt(torch.tensor(2.0 / torch.pi)) *
+            (x + 0.044715 * torch.pow(x,3))
+        ))      
 
 # Feed Forward class
 class FeedForward(nn.Module):
@@ -26,7 +62,7 @@ class FeedForward(nn.Module):
         super().__init__()
         self.layers = nn.Sequential(
             nn.Linear(cfg["emb_dim"], 4 * cfg["emb_dim"]), # Expanding the dimension by 4
-           nn.GELU(approximate="tanh"), # Smoothening the negative neurons
+            GELU(), # Smoothening the negative neurons
             nn.Linear(4 * cfg["emb_dim"], cfg["emb_dim"]), # Compressing back to the size
         )
     def forward(self, x):
@@ -53,8 +89,8 @@ class TransformerBlock(nn.Module):
             qkv_bias=cfg["qkv_bias"]
         )
         self.ff = FeedForward(cfg) # Expand
-        self.norm1 = nn.LayerNorm(cfg["emb_dim"]) # Normalize
-        self.norm2 = nn.LayerNorm(cfg["emb_dim"]) # Normalize
+        self.norm1 = LayerNorm(cfg["emb_dim"]) # Normalize
+        self.norm2 = LayerNorm(cfg["emb_dim"]) # Normalize
         self.drop_shortcut = nn.Dropout(cfg["drop_rate"]) # Dropout
 
     
@@ -84,13 +120,13 @@ class GPTModel(nn.Module):
         self.pos_emb = nn.Embedding(cfg["context_length"], cfg["emb_dim"]) # At any given time, we can only process context words
         self.drop_emb = nn.Dropout(cfg["drop_rate"]) # 10% drop rate
 
-        # Transformer Block
+        # Just a placeholder for Transformer Block
         self.trf_blocks = nn.Sequential(
             *[TransformerBlock(cfg) for _ in range(cfg["n_layers"])]
         )
         
         # Layer Normalization
-        self.final_norm = nn.LayerNorm(cfg["emb_dim"])
+        self.final_norm = LayerNorm(cfg["emb_dim"])
         self.out_head = nn.Linear(
             cfg["emb_dim"], cfg["vocab_size"], bias=False
         )

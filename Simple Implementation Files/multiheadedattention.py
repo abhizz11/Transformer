@@ -1,6 +1,5 @@
 import torch 
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class MultiHeadAttention(nn.Module):
@@ -41,29 +40,24 @@ class MultiHeadAttention(nn.Module):
         queries = queries.transpose(1, 2)
         values = values.transpose(1, 2)
 
-        # Determine dropout probability
-        dropout_probability = (
-            self.dropout.p if self.training else 0.0
-        )
+        # Compute attn scores
+        attn_scores = queries @ keys.transpose(2, 3) # Dot product for each head
 
-        # Optimized context vector implementation
-        context_vec = F.scaled_dot_product_attention(
-            queries,
-            keys,
-            values,
-            dropout_p=dropout_probability,
-            is_causal=True, # Applies causal attention mask
-        )
+        # To mask future tokens 
+        mask_bool = self.mask.bool()[:num_tokens, :num_tokens]
 
-        # Retranspose to get context vectors
-        context_vec = context_vec.transpose(1, 2)
+        attn_scores.masked_fill_(mask_bool, -torch.inf) # Masking with -infinity
+
+        attn_weights = torch.softmax(attn_scores / keys.shape[-1] ** 0.5, dim=-1)
+        attn_weights = self.dropout(attn_weights)
+
+        # Retranspose to get Context vectors
+        context_vec = (attn_weights @ values).transpose(1, 2)
 
         # Combine
-        context_vec = context_vec.contiguous().view(
-            b,
-            num_tokens,
-            self.d_out,
-        )
+        context_vec = context_vec.contiguous().view(b, num_tokens, self.d_out)
+        context_vec = self.out_proj(context_vec) 
 
-        return self.out_proj(context_vec)
+        return context_vec
+
 
