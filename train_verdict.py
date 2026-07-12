@@ -7,8 +7,6 @@ import torch
 import time 
 from datasets import load_dataset
 
-ds = load_dataset("roneneldan/TinyStories")
-
 start_time = time.time()
 
 # Measuring cross-entropy loss

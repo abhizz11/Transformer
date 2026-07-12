@@ -11,3 +11,8 @@ LLM Loss function.ipynb
 tinystories.py
 LLM Pretraining.ipynb
 train_tiny_stories.py
+causalattention.py
+attentionweights.py
+the-verdict.txt
+tokenizer.py
+train_verdict.py
