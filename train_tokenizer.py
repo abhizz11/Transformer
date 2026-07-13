@@ -1,4 +1,12 @@
-from collections.abc import Iterator 
+# This file trains the tokenizer
+'''
+Tokens are the language of LLMs. They cannot understand text like we do, so before the model is trained, we need to tokenize
+the words then pass it through different LLM layers, get the desired output, and convert it back to text, which we can read.
+We are training the tokenizer using BPE(Byte-Pair Encoding) algorithm which combines frequently occuring letters until 
+there aren't any left. The vocab size is 8000 and we are training the Tokenizer using 200_000 stories of batch size 1_000
+'''
+
+from collections.abc import Iterator  # Iterators, is essentially pause and resume
 
 from datasets import load_dataset # Loading dataset
 from tokenizers import Tokenizer, decoders, models, pre_tokenizers, trainers # Modules required to train a tokenizer
@@ -11,6 +19,9 @@ EOS_TOKEN = "<|endoftext|>" # End of sequence token
 UNK_TOKEN = "<|unk|>" # unknown tokens 
 
 def story_batches() -> Iterator[list[str]]:
+    '''Trying to load all of the stories at once is expensive and can crash the RAM. This function batches them and processes them. 
+    It prepares 1000 batches before processing the next and stops after 200_000 stories have been processed.
+      '''
     dataset = load_dataset(
         "roneneldan/TinyStories",
         split = "train",
@@ -34,7 +45,7 @@ def story_batches() -> Iterator[list[str]]:
         yield batch 
 
 def main():
-    # Create a tokenizer object, using Byte-Pair encoding model
+    # Create a tokenizer object, using Hugging Face's Byte-Pair encoding model
     tokenizer = Tokenizer(
         models.BPE(unk_token=UNK_TOKEN)
     )

@@ -6,6 +6,11 @@ import torch
 from torch.utils.data import DataLoader, Dataset 
 
 class TokenDataset(Dataset):
+    '''
+    This class defines how to fetch exactly one specific training example when given an index number. Instead of loading
+    massive dataset into RAM all at once, it reads a pre-tokenized binary file directly from the hard drive in chunks 
+    into inpurt-target pairs for next-token prediction and serves them efficiently to the GPU
+    '''
     def __init__(
             self,
             token_file: str | Path,
@@ -24,7 +29,7 @@ class TokenDataset(Dataset):
             )
 
         # Instead of loading an entire dataset into the RAM, create a virtual array and read the 
-        # data directly from hard drive only when explicitly asked
+        # data directly from hard drive only when explicitly asked. This is the most critical part of the class
         self.tokens = np.memmap( 
             self.token_file,
             dtype=np.uint16, # Tokenizer's vocab can be up to 65,535 (our size is 8k)
@@ -79,6 +84,13 @@ def create_dataloader(
         drop_last: bool = True, 
         seed: int = 42 
 ) -> DataLoader:
+    '''
+    Dataset knows how to get one sequence, the DataLoader is the manager that grabs hundreds of them, groups them into
+    batches, and optimizes their delivery to the GPU. Dataloader will shuffle millions of sequences in the exact same
+    random order every time the script is run. We want to controll this randomness using seed to ensure that if we 
+    stop and restart training, we can pick up exactly where we left off without accidentally feeding the model the exact
+    same data twice 
+    '''
     dataset = TokenDataset(
         token_file=token_file,
         context_length=context_length,   

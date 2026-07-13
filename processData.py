@@ -1,3 +1,4 @@
+# This file handles the tokenization splits and writes the training, validation dataset into binary files.
 from __future__ import annotations
 
 from pathlib import Path 
@@ -6,18 +7,33 @@ from datasets import load_dataset
 from tokenizers import Tokenizer
 from tqdm.auto import tqdm
 
-EOS_TOKEN = "<|endoftext|>"
+EOS_TOKEN = "<|endoftext|>" # end of sequence token
 
 
 def tokenize_split(
-        split: str,
-        output_file: str,
-        tokenizer_file: str,
-        max_tokens: int | None = None,
-        shuffle_buffer_size: int = 10_000,
-        seed: int = 42,
-        overwrite: bool = False,
+        split: str, # which part of dataset to load "train" or "validation"
+        output_file: str, # Designated file path where the final compiled binary path will be saved
+        tokenizer_file: str, # The file path to pre-trained tokenizer.
+        max_tokens: int | None = None, # Script will stop processing once it hits the exact number of tokens
+        shuffle_buffer_size: int = 10_000, # Controls how thoroughly the dataset is randomized
+        seed: int = 42, # A fixed number used to initialize the random number generator
+        overwrite: bool = False, # Decide if you want to overwrite file or not
 ) -> int:
+    '''
+    Function that handles the entire pipeline of downloading, converting, and saving the data. The dataset is loaded with 
+    streaming=True. This means the script does not download the entire dataset, instead it streams row by row. Because the 
+    dataset is streaming, we cannot shuffle the entire dataset, the program shuffles according the the shuffle_buffer_size. 
+
+    The function first, checks if the output file already exists and checks overwrite. If it does it calculates the total number
+    of tokens and exits early. If the tokens don't exist then it loads our custom tokenizer and checks vocab size. It connects to 
+    HF's dataset and applies the streaming shuffle. Instead of writing directly to output_file, the script creates a temp file
+    incase of power loss. 
+
+    The processing loop contains: encoding, appending EOS, limit checks, and write to disk. 
+
+    If the loop finishes without errors, it renames the .tmp file to the final output file. If there's failure 
+    it deletes the tmp file and re-raises the error for traceback. 
+    '''
     output_path = Path(output_file)
     tokenizer_path = Path(tokenizer_file)
 

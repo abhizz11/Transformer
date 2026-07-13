@@ -1,3 +1,11 @@
+# This file is about training the model and measuring cross-entropy loss
+'''
+We are trying to maximize the probability of generated tokens to be as close to 1 as possible, 
+but working with probabilities is messy, so we use logarithms. However, since probability is 
+between 0 and 1, the logs come out as negative values, so we take the negative log and now the
+problem shifts from maximizing to minimizing. Now, we want the logarithms to be as close to 0 as
+possible. This program uses advanced optimization techniques to measure cross entropy loss and train the model.
+'''
 from __future__ import annotations
 
 import math
@@ -30,7 +38,7 @@ def evaluate_model(
 ):
     '''We start with inference mode to shut down the gradient-tracking. Making the forward pass significantly cheaper and faster.
     We also do model.eval() so that layers like Dropout are turned off'''
-    was_training = model.training
+    was_training = model.training # Store model state if it was training
     model.eval()
 
     total_loss = 0.0
@@ -40,58 +48,61 @@ def evaluate_model(
         for batch_index, (input_batch, target_batch) in enumerate(data_loader):
             if max_batches is not None and batch_index >= max_batches:
                 break 
-            input_batch = input_batch.to(device, non_blocking = True)
-            target_batch = target_batch.to(device, non_blocking = True)
+            input_batch = input_batch.to(device, non_blocking = True) # The input batch
+            target_batch = target_batch.to(device, non_blocking = True) # The Target batch
 
             with _autocast_context(device):
-                logits = model(input_batch)
-                loss_sum = F.cross_entropy(
+                logits = model(input_batch) # Get the logits and calculate cross entropy loss
+                loss_sum = F.cross_entropy( # Cross entropy loss is how far the model's predictions are from the correct answers
                     logits.flatten(0, 1),
                     target_batch.flatten(),
-                    reduction="sum",
+                    reduction="sum", # Add up the total mathematical error for every single element in the batch
                 )
 
-            total_loss += loss_sum.item()
-            total_tokens += target_batch.numel()
+            total_loss += loss_sum.item()  # 
+            total_tokens += target_batch.numel() # numel() returns the total number of elements in the batch
     finally:
-        model.train(was_training)
+        model.train(was_training) # If it was training revert the state
 
-    if total_tokens == 0:
+    if total_tokens == 0: # If no tokens produced raise Value error
         raise ValueError("Validation loader produced no tokens.")
 
     return total_loss / total_tokens                
 
 # AdamW function that excludes biases and normalization vectors from decay
 def create_optimizer(
-        model,
-        learning_rate = 3e-4,
-        weight_decay = 0.1,
-        betas = (0.9, 0.95),
+        model, 
+        learning_rate = 3e-4, # The exact step size the model takes to minimize loss (walking down the bottom of the valley)
+        weight_decay = 0.1, # Every time optimizer takes a step, weight decay pulls that back toward zero by 0.1%
+        betas = (0.9,  # betas control the memory. beta1 stops the model from widly left or right. 
+                 0.95), # beta2 adapts the learning rate for every single weight in the network            
 ):
-    '''Standard weight decay(L2) shrinks all model weights slightly during every step to prevent overfitting. This function 
-    explicitly loops through all model parameters and splits them into two lists. Biases and normalization should not be decayed 
+    '''Standard weight decay(L2) shrinks all model weights slightly during every step to prevent overfitting. Overfitting 
+    is when a modele memorizes the training data instead of learning the concept. This function explicitly loops
+    through all model parameters and splits them into two lists. Biases and normalization should not be decayed 
     because doing so limits the model's ability to shift and scale its activations properly.'''
-    decay_parameters = []
-    no_decay_parameters = []
+    
+    decay_parameters = [] # These determine how diff concepts relate to each other. Apply weight decay to these
+    no_decay_parameters = [] # Shrinking a bias toward 0 doesn't prevent overfitting, so don't apply weight decay
 
     for parameter in model.parameters():
         if not parameter.requires_grad:
             continue
         if parameter.dim() >= 2:
-            decay_parameters.append(parameter)
+            decay_parameters.append(parameter) # Apply weight decay
         else:
-            no_decay_parameters.append(parameter)
+            no_decay_parameters.append(parameter) # DO noy apply weight decay
     
     parameter_groups = [
         {"params": decay_parameters, "weight_decay": weight_decay},
         {"params": no_decay_parameters, "weight_decay": 0.0},
     ]
 
-    return torch.optim.AdamW(
-        parameter_groups,
+    return torch.optim.AdamW( # We are using AdamW optimizer  which stands for Adaptive Moment Estimation. 
+        parameter_groups, #  Adam is smarter optimization that has memory.
         lr=learning_rate,
-        betas=betas,
-        eps=1e-8,
+        betas=betas, 
+        eps=1e-8, # eps (epsilon) a microscopic number to prevent the program from crashing due to 1 / 0 type errors
     )
 
 # Function to save model checkpoint
@@ -106,10 +117,22 @@ def save_checkpoint(
     history=None,
     best_val_loss=math.inf
 ):
-    '''Training can take a lot of time, so to prepare for the crash, this function saves model weights, the optimizer state, the scaler state,
-    the scheduler step, and the entire history of losses.'''
-    checkpoint_path = Path(path)
-    checkpoint_path.parent.mkdir(
+    '''Training can take a lot of time, so to prepare for the crash, this function saves model weights, the optimizer state, 
+    the scaler state,the scheduler step, and the entire history of losses, writing it into a PyTorch(pt) file.
+    
+    Important Parameters in the function: scaler, optimizer_step, history 
+    
+    Scaler is the object used for FP16 mixed-precision training. It multplies loss by a massive number to prevent small 16-bit
+    float gradients from turning into 0.0 (underflowing). It dynamically adjusts this multiplier during training, lowering the 
+    multiplier if infinite gradient is detected and raising it after things are stable.
+
+    Optimizer_step represents exacts how many times the model has updated its weights. We are using gradient accumulation,
+    so the number of batches processed != optimizer_step. if gradient_accumulation_step = 16, then batches equal 1 optimizer step
+
+    History is the dictionary that stroes all the data points. 
+    '''
+    checkpoint_path = Path(path) # Path to save the model
+    checkpoint_path.parent.mkdir( # Make directory
         parents=True,
         exist_ok=True,
     )
@@ -117,7 +140,7 @@ def save_checkpoint(
     checkpoint = {
         "model": model.state_dict(),
         "optimizer": optimizer.state_dict(),
-        "scaler": scaler.state_dict(),
+        "scaler": scaler.state_dict(), 
         "optimizer_step": optimizer_step,
         "tokens_seen": tokens_seen,
         "history": history,
@@ -127,7 +150,7 @@ def save_checkpoint(
     if scheduler is not None:
         checkpoint["scheduler"] = scheduler.state_dict()
 
-    torch.save(checkpoint, checkpoint_path) 
+    torch.save(checkpoint, checkpoint_path)
 
 # Warmup function
 def create_warmup_cosine_scheduler(
@@ -169,8 +192,8 @@ def load_checkpoint(
     device,
     scheduler=None
 ):
-    '''This function injects all the saved data back into RAM. The model continues training exactly as if the crash never happened. This function prevents amnesia 
-    regarding previous learning. '''
+    '''This function injects all the saved data back into RAM. The model continues training exactly as if the crash never happened. 
+    This function prevents amnesia regarding previous learning. '''
     checkpoint = torch.load(
         path,
         map_location=device,
@@ -208,6 +231,7 @@ def train_model(
     '''The script trains the model through smaller batches and calculates the loss. If your batch size is 256, but
     the GPU cannot fit it all, the training will crash. This function loops through the micro steps (16) calculates loss, 
     accumualtes the loss and when micro_step % grad steps is 0, we update '''
+    
     if max_optimizer_steps <= 0:
         raise ValueError("max_optimizer_steps must be positive")
     if gradient_accumulation_steps <= 0:
@@ -281,9 +305,10 @@ def train_model(
 
     # Function to evaluate the model at multiple distinct points. 
     def record_evaluation():
-        '''This function calculates average training loss, pauses training and evaluates model to test the network on unseen data. It also logs the metrics like
-        tokens seen, learning, rate and adds losses to the history dictionary, printing them to the terminal. If new validation loss is strictly lower,
-        it overwrites the best.pt file to snure the highest performing version of the model is saved even if the model overfits and degrades later.'''
+        '''This function calculates average training loss, pauses training and evaluates model to test the network on unseen data. 
+        It also logs the metrics like tokens seen, learning, rate and adds losses to the history dictionary, printing them 
+        printing them to the terminal.If new validation loss is strictly lower, it overwrites the best.pt file to 
+        ensure the highest performing version of the model is saved even if the model overfits and degrades later.'''
         nonlocal interval_loss_sum, interval_step_count, best_val_loss, last_eval_step
 
         train_loss = interval_loss_sum / max(1, interval_step_count)
@@ -316,6 +341,7 @@ def train_model(
             f"lr {current_lr:.2e}"
         )
 
+        # If current validation loss is lower then also save the checkpoint
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             save_checkpoint(
@@ -349,7 +375,8 @@ def train_model(
                         logits.flatten(0,1),
                         target_batch.flatten(),
                     )
-                    loss_for_backward = loss / gradient_accumulation_steps # Dividing the loss so that the final accumulated gradient matches the scale of a single massive batch
+                    # Dividing the loss so that the final accumulated gradient matches the scale of a single massive batch
+                    loss_for_backward = loss / gradient_accumulation_steps 
                 
                 scaler.scale(loss_for_backward).backward()
 
