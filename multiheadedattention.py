@@ -12,17 +12,14 @@ class MultiHeadAttention(nn.Module):
         self.d_out = d_out
         self.num_heads = num_heads
         self.head_dim = d_out // num_heads
+        self.context_length = context_length
 
         self.W_query = nn.Linear(d_in, d_out, bias=qkv_bias) # Query matrix
         self.W_key = nn.Linear(d_in, d_out, bias=qkv_bias) # Key matrix
         self.W_value = nn.Linear(d_in, d_out, bias=qkv_bias) # Value matrix
         self.out_proj = nn.Linear(d_out, d_out) # To combine output heads later
-        self.dropout = nn.Dropout(dropout) # To randomy turn off some of the neurons
+        self.dropout = nn.Dropout(dropout) # To randomly turn off some of the neurons
 
-        self.register_buffer(
-            "mask",
-            torch.triu(torch.ones(context_length, context_length), diagonal=1)
-        ) # To mask future tokens
 
     def forward(self, x):
         b, num_tokens, d_in = x.shape

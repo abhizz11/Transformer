@@ -201,9 +201,9 @@ def train_model(
         checkpoint_frequency=1_000, # Every 1000 steps save the model
         eval_batches = 50, # Evaluation batches
         scheduler = None, # Scheduler controls the learning rate
-        checkpoint_dir = "checkpoints", # Checkpoint directory
-        resume_from = None, # Start from a point of model crashes
-        keep_step_checkpoints=False,
+        checkpoint_dir: str | Path = "checkpoints", # Checkpoint directory
+        resume_from: str | Path | None = None, # Start from a point of model crashes
+        keep_step_checkpoints: bool = False,
 ):
     '''The script trains the model through smaller batches and calculates the loss. If your batch size is 256, but
     the GPU cannot fit it all, the training will crash. This function loops through the micro steps (16) calculates loss, 
@@ -216,6 +216,9 @@ def train_model(
         raise ValueError("Evaluation and checkpoint frequencies must be positive")
     if len(train_loader) == 0:
         raise ValueError("Training loader is empty")
+    
+    checkpoint_dir = Path(checkpoint_dir)
+    checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
     amp_enabled = device.type == "cuda"
     scaler = torch.amp.GradScaler( # Because we are using Fp16, we get very small gradients, so GradScaler multiplies

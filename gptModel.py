@@ -18,7 +18,7 @@ GPT_CONFIG_124M = TINYSTORIES_CONFIG_29M
 # Feed Forward class
 class FeedForward(nn.Module):
     '''
-    MHA figures out which tokens are related to each other, FFN retrieves stroed concepts
+    MHA figures out which tokens are related to each other, FFN retrieves stored concepts
     learned during training and injects them into the token. FFN works in isolation, ignoring
     the sequence completely, and applies math to every single token individually.
 
@@ -85,7 +85,7 @@ class GPTModel(nn.Module):
         self.out_head = nn.Linear(
             cfg["emb_dim"], cfg["vocab_size"], bias=False
         )
-        self.apply(self.__init__weights)
+        self.apply(self._init_weights)
 
         # Weight typing, input_embeddings and output logits use one matrix. Removes 8000 * 512 = 4_096_000 duplicate parameters
         self.out_head.weight = self.tok_emb.weight
@@ -104,7 +104,7 @@ class GPTModel(nn.Module):
         context_length = self.cfg["context_length"]
         if seq_len > context_length:
             raise ValueError(
-                f"Sequence length {seq_len} exceeds context length"
+                f"Sequence length {seq_len} exceeds context length "
                 f"{context_length}."
             )
 

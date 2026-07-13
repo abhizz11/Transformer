@@ -1,5 +1,5 @@
-from pathlib import Path 
 from __future__ import annotations 
+from pathlib import Path 
 
 import numpy as np
 import torch 
@@ -17,8 +17,8 @@ class TokenDataset(Dataset):
         if not self.token_file.exists():
             raise FileNotFoundError(f"Token file not found: {self.token_file}")
         
-        # uint16 is exactly 2 bytes. if file isn't divisble by 2 it means the file is corrupted
-        if self.token_file.stat().st_size % np.dtype(np.unit16).itemsize != 0:
+        # uint16 is exactly 2 bytes. if file isn't divisible by 2 it means the file is corrupted
+        if self.token_file.stat().st_size % np.dtype(np.uint16).itemsize != 0:
             raise ValueError(
                 f"{self.token_file} is not a valid uint16 token file."
             )
@@ -26,8 +26,8 @@ class TokenDataset(Dataset):
         # Instead of loading an entire dataset into the RAM, create a virtual array and read the 
         # data directly from hard drive only when explicitly asked
         self.tokens = np.memmap( 
-            token_file,
-            dtype=np.uint16, # Tokenizer's vocab can be upto 65,535 (our size is 8k)
+            self.token_file,
+            dtype=np.uint16, # Tokenizer's vocab can be up to 65,535 (our size is 8k)
             mode="r", # Opens the file in read-only mode to prevent accidental overwrites
         )
 
