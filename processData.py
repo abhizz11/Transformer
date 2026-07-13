@@ -63,7 +63,7 @@ def tokenize_split(
 
     try:
         # Open the target file on the hard drive and write raw computer binaries
-        with temporary_path.open(output_file, "wb") as output:
+        with temporary_path.open("wb") as output:
             for example in dataset:
                 token_ids = tokenizer.encode(example["text"]).ids # Convert to tokens
                 token_ids.append(eos_id) # Add eos id

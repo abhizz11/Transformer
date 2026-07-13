@@ -11,3 +11,10 @@ LLM Loss function.ipynb
 tinystories.py
 LLM Pretraining.ipynb
 the-verdict.txt
+data/*.bin
+checkpoints/*.pt
+best.pt
+latest.pt
+quick_1m_best_model.pt
+quick_1m_generated_samples.json
+quick_1m_training_history.json
