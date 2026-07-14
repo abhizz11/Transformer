@@ -56,15 +56,22 @@ def tokenize_split(
     if eos_id is None: # If there's no eos id stop executing to prevent building a corrupted dataset.
         raise ValueError("EOS token is missing from the tokenizer.")
     
-    # Load dataset according to the split (train, validation) and streaming=True
-    dataset = load_dataset("roneneldan/TinyStories", split=split, streaming=True)
+    # Load dataset according to the split (train, validation) and streaming
+    dataset = load_dataset("roneneldan/TinyStories", split=split, streaming=False, download_mode="reuse_dataset_if_exists")
 
     # Shuffle according to the seed
     if shuffle_buffer_size > 0 and split == "train":
         dataset = dataset.shuffle(
-            seed=seed,
-            buffer_size=shuffle_buffer_size,
+            seed=seed
         )
+    
+    # Print 
+    print("Dataset type:", type(dataset))
+    print("Rows:", len(dataset))
+    print("Cache files:")
+
+    for cache_file in dataset.cache_files:
+        print(cache_file["filename"])
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = output_path.with_suffix(output_path.suffix + ".tmp")

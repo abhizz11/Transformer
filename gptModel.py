@@ -1,3 +1,12 @@
+'''
+ This file implements the GPT Model with weight tying.
+ A standard LLM has two massive matrices that deal with vocab,
+ input embedding and output head (logits) 
+ Weight tying forces these two distinct layer to share the exact
+ same matrix in memory (one just transpose of other), saving RAM usage
+ and training time
+
+'''
 from __future__ import annotations
 import torch
 import torch.nn as nn
@@ -92,6 +101,11 @@ class GPTModel(nn.Module):
     
     @staticmethod
     def _init_weights(module: nn.Module) -> None:
+        '''Function overrides PyTorch's default random weight assignments
+        and manually sets the initial starting numbers for NN's matrices before training begins. If the 
+        model starts with wrong weights, it will physically be unable to learn.
+        The purpose of this initialization is to stabilize the math during the very first steps of training.
+        '''
         if isinstance(module, nn.Linear):
             nn.init.normal_(module.weight, mean=0.0, std=0.02)
             if module.bias is not None:
@@ -120,14 +134,14 @@ class GPTModel(nn.Module):
         return self.out_head(x)
 
 # Generate function
-@torch.inference_mode() 
+@torch.inference_mode() # Disable gradient calculation
 def generate(
-        model, 
-        idx, 
-        max_new_tokens, 
-        context_size,
+        model, # model
+        idx, # Input ids
+        max_new_tokens, # Tokens to generate
+        context_size, # how much of the text model remembers at a time
         temperature=0.8, # how random the model is
-        top_k=40,
+        top_k=40, # prevents the token from picking nonsensical tokens
         eos_id=None
         ):
     was_training = model.training # Check if model was training for later
@@ -139,19 +153,22 @@ def generate(
             idx_cond = idx[:, -context_size:] # Only work on the context size window, trim the excess tokens
             logits = model(idx_cond)[:, -1, :] # Last row of digits
             
+            # Greedy decoding. Pick the token with the highest score, this is deterministic 
             if temperature <= 0:
-                idx_next = torch.argmax(logits, dim=-1, keepdim=True)
+                idx_next = torch.argmax(logits, dim=-1, keepdim=True) # argmax gives out token with highest logits
             else:
-                logits = logits / temperature
+                # A temperature < 1 sharpens the distribution, high scores higher low scores lower
+                logits = logits / temperature  # temperature > 1 increases randomness
 
-                if top_k is not None:
-                    k = min(top_k, logits.shape[-1])
-                    top_values, _ = torch.topk(logits, k)
-                    cutoff = top_values[:, -1].unsqueeze(-1)
-                    logits = logits.masked_fill(logits < cutoff, -torch.inf)
                 
-                probabilities = torch.softmax(logits, dim=-1)
-                idx_next = torch.multinomial(probabilities, num_samples=1)
+                if top_k is not None:
+                    k = min(top_k, logits.shape[-1]) # Safety check, so that the K is not larger than model's vocab
+                    top_values, _ = torch.topk(logits, k) # Isolates the k highest_scoring tokens
+                    cutoff = top_values[:, -1].unsqueeze(-1) # Isolate the score of the lowest token within k-group
+                    logits = logits.masked_fill(logits < cutoff, -torch.inf) # Below cutoff turn any other logit score to -inf
+                
+                probabilities = torch.softmax(logits, dim=-1) # Normalize
+                idx_next = torch.multinomial(probabilities, num_samples=1) # Instead of picking the highest one, roll a die and pick the next token 
 
             idx = torch.cat((idx, idx_next), dim=1) # Append it for next token generation
 
@@ -184,6 +201,7 @@ def token_ids_to_text(token_ids, tokenizer, skip_special_tokens=True):
     ids = token_ids.detach().cpu().reshape(-1).tolist()
     return tokenizer.decode(ids, skip_special_tokens=skip_special_tokens)
 
+# Returns the total number of parameters in the model
 def count_parameters(model):
     return sum(parameter.numel() for parameter in model.parameters())
 
