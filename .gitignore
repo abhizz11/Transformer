@@ -16,8 +16,5 @@ checkpoints/*.pt
 best.pt
 latest.pt
 quick_1m_best_model.pt
-quick_1m_training_history.json
 tinystories_25m_best_model.pt
-tinystories_25m_training_history.json
 tinystories_100m_best_model.pt
-tinystories_100m_training_history.json

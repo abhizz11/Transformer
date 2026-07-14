@@ -9,6 +9,8 @@ A compact decoder-only Transformer implemented and trained from scratch in PyTor
 
 The project was built as an educational implementation of the core components used in GPT-style language models: byte-level BPE tokenization, causal multi-head self-attention, learned positional embeddings, pre-normalized Transformer blocks, next-token prediction, mixed-precision training, gradient accumulation, validation monitoring, checkpoint recovery, and autoregressive text generation.
 
+The repository now keeps the complete 100M-token implementation in `tiny_stories_100m/`, the earlier learning experiments in `Simple Implementation Files/`, and the rendered training and saved-model notebooks at the repository root for immediate inspection on GitHub.
+
 > [!IMPORTANT]
 > This is a small research and educational model, not a production assistant. It has not undergone alignment training, red-teaming, memorization testing, privacy auditing, or comprehensive safety evaluation.
 
@@ -404,7 +406,9 @@ Recommended `.gitignore` entries:
 
 ```gitignore
 data/*.bin
-checkpoints/*.pt
+checkpoints/**/*.pt
+tiny_stories_100m/data/*.bin
+tiny_stories_100m/checkpoints/**/*.pt
 .cache/
 __pycache__/
 .ipynb_checkpoints/
@@ -472,46 +476,49 @@ Python, NumPy, and PyTorch seeds are set to 42. Exact bit-for-bit reproducibilit
 
 ## Repository structure
 
+The repository separates the original learning implementation from the complete 100M-token TinyStories experiment.
+
 ```text
 Transformer/
-├── gptModel.py
-│   ├── model configuration
-│   ├── feed-forward network
-│   ├── Transformer block
-│   ├── GPT model
-│   └── generation/token conversion helpers
+├── Simple Implementation Files/
+│   └── earlier attention, tokenizer, dataset, and GPT experiments
 │
-├── multiheadedattention.py
-│   └── causal multi-head self-attention using PyTorch SDPA
-│
-├── dataSet.py
-│   ├── memory-mapped token dataset
-│   └── PyTorch DataLoader construction
-│
-├── processData.py
-│   └── TinyStories loading, tokenization, EOS insertion, and binary writing
-│
-├── train_model.py
-│   ├── validation
-│   ├── AdamW parameter grouping
-│   ├── warmup/cosine scheduler
-│   ├── mixed-precision training
-│   └── checkpoint save/resume
-│
-├── train_tokenizer.py
-│   └── byte-level BPE tokenizer training
-│
-├── tinystories_tokenizer.json
-│   └── trained 8K tokenizer
-│
-├── train_model.ipynb
-│   ├── configuration
-│   ├── tokenizer and dataset checks
-│   ├── visualizations
-│   ├── smoke test
-│   ├── training
-│   ├── loss plots
-│   └── final generation
+├── tiny_stories_100m/
+│   ├── dataSet.py
+│   │   ├── memory-mapped token dataset
+│   │   └── PyTorch DataLoader construction
+│   │
+│   ├── gptModel.py
+│   │   ├── 29.4M-parameter model configuration
+│   │   ├── feed-forward network
+│   │   ├── Transformer blocks
+│   │   ├── GPT model
+│   │   └── generation/token conversion helpers
+│   │
+│   ├── multiheadedattention.py
+│   │   └── causal multi-head self-attention using PyTorch SDPA
+│   │
+│   ├── processData.py
+│   │   └── TinyStories loading, tokenization, EOS insertion, and binary writing
+│   │
+│   ├── train_model.py
+│   │   ├── validation
+│   │   ├── AdamW parameter grouping
+│   │   ├── warmup/cosine scheduling
+│   │   ├── mixed-precision training
+│   │   └── checkpoint save/resume
+│   │
+│   ├── train_tokenizer.py
+│   │   └── byte-level BPE tokenizer training
+│   │
+│   ├── tinystories_tokenizer.json
+│   │   └── tokenizer copy used by the self-contained implementation
+│   │
+│   ├── train_model.ipynb
+│   │   └── runnable copy of the complete training workflow
+│   │
+│   └── SavedModelExperiments.ipynb
+│       └── runnable copy of the checkpoint-loading and generation workflow
 │
 ├── outputs/
 │   ├── tinystories_100m_training_history.json
@@ -519,13 +526,67 @@ Transformer/
 │   ├── tinystories_100m_generated_samples.json
 │   └── tinystories_100m_best_model.pt
 │
+├── train_model.ipynb
+│   └── rendered record of preprocessing, validation, and the 100M-token run
+│
+├── SavedModelExperiments.ipynb
+│   └── rendered record of loading the trained model and sampling stories
+│
+├── tinystories_tokenizer.json
+├── README.md
 ├── LICENSE
 ├── NOTICE
+├── RESPONSIBLE_USE.md
 ├── THIRD_PARTY_NOTICES.md
-└── RESPONSIBLE_USE.md
+└── .gitignore
 ```
 
-The import in the notebook uses `dataSet.py` with that capitalization. File names are case-sensitive on Linux, so imports and file names must match exactly. Renaming it to `dataset.py` is recommended for conventional Python style, but all imports must be updated at the same time.
+### Why the notebooks appear twice
+
+The two root notebooks are intentionally kept at the top level so GitHub visitors can immediately inspect the recorded outputs, loss values, plots, and generations.
+
+Copies inside `tiny_stories_100m/` keep the complete implementation together for users who clone the repository and want to run the experiment. When either notebook is changed, both copies should be updated in the same commit so they do not drift apart.
+
+### Import behavior
+
+The root notebooks import modules through the implementation folder, for example:
+
+```python
+from tiny_stories_100m.dataSet import create_dataloader
+from tiny_stories_100m.gptModel import GPTModel
+from tiny_stories_100m.train_model import train_model
+```
+
+Some implementation modules retain ordinary sibling imports such as:
+
+```python
+import multiheadedattention
+```
+
+instead of package-relative imports. To keep those imports working from a clean clone, the notebooks should add the implementation directory to `sys.path` before importing project modules:
+
+```python
+from pathlib import Path
+import sys
+
+REPO_ROOT = Path.cwd()
+IMPLEMENTATION_DIR = REPO_ROOT / "tiny_stories_100m"
+
+if str(IMPLEMENTATION_DIR) not in sys.path:
+    sys.path.insert(0, str(IMPLEMENTATION_DIR))
+```
+
+This bootstrap allows both the package-style notebook imports and the existing sibling imports inside the implementation files to resolve. Without it, a fresh Python process may fail to find `multiheadedattention.py` even though the file is in the same folder as `gptModel.py`.
+
+### Case-sensitive file names
+
+The project currently uses the filename `dataSet.py`. File names and imports are case-sensitive on Linux, so this must match exactly:
+
+```python
+from tiny_stories_100m.dataSet import create_dataloader
+```
+
+Renaming it to `dataset.py` is optional, but all imports and notebook references must then be updated together.
 
 ---
 
@@ -537,6 +598,8 @@ The import in the notebook uses `dataSet.py` with that capitalization. File name
 git clone https://github.com/abhizz11/Transformer.git
 cd Transformer
 ```
+
+Cloning downloads the implementation folders, root notebooks, tokenizer, saved outputs, README, and notice files that are tracked by Git. Large ignored files such as local Hugging Face caches, generated token binaries, and training checkpoints are not downloaded.
 
 ### 2. Create a virtual environment
 
@@ -556,7 +619,7 @@ source .venv/bin/activate
 
 ### 3. Install dependencies
 
-Install the correct CUDA-enabled PyTorch build for your operating system and GPU from the official PyTorch installation selector. Then install the remaining packages:
+Install a CUDA-enabled PyTorch build that matches your system from the official PyTorch installation instructions. Then install the remaining packages:
 
 ```bash
 pip install datasets tokenizers numpy matplotlib tqdm jupyter
@@ -567,26 +630,106 @@ The recorded experiment used:
 ```text
 Python 3.13
 PyTorch 2.12.0+cu126
-NVIDIA GeForce RTX 3050 6GB Laptop GPU
+NVIDIA GeForce RTX 3050 Laptop GPU with 6 GB VRAM
 ```
 
-A different recent PyTorch version may work, but results and performance can differ.
+Different PyTorch, CUDA, GPU, and operating-system versions can produce different performance and slightly different numerical results.
 
-### 4. Start Jupyter
+### 4. Start Jupyter from the repository root
 
 ```bash
 jupyter notebook
 ```
 
-Open:
+Open either root notebook:
 
 ```text
 train_model.ipynb
+SavedModelExperiments.ipynb
+```
+
+The root notebooks are the easiest versions to inspect on GitHub. Their matching copies inside `tiny_stories_100m/` keep the experiment next to its modules.
+
+### 5. Confirm the repository root
+
+The notebook expects its working directory to be the cloned repository root:
+
+```python
+from pathlib import Path
+
+REPO_ROOT = Path.cwd()
+assert (REPO_ROOT / "tiny_stories_100m").exists()
+assert (REPO_ROOT / "outputs").exists()
+```
+
+Before importing the model modules, add the implementation directory to the Python search path:
+
+```python
+import sys
+
+IMPLEMENTATION_DIR = REPO_ROOT / "tiny_stories_100m"
+
+if str(IMPLEMENTATION_DIR) not in sys.path:
+    sys.path.insert(0, str(IMPLEMENTATION_DIR))
+```
+
+Then import the implementation:
+
+```python
+from tiny_stories_100m.dataSet import create_dataloader
+from tiny_stories_100m.gptModel import (
+    GPTModel,
+    TINYSTORIES_CONFIG_29M,
+    generate,
+    text_to_token_ids,
+    token_ids_to_text,
+)
+from tiny_stories_100m.processData import tokenize_split
+from tiny_stories_100m.train_model import (
+    build_optimizer,
+    build_warmup_cosine_scheduler,
+    evaluate_model,
+    train_model,
+)
 ```
 
 ---
 
 ## Reproducing the experiment
+
+The training notebook at the repository root is the rendered experiment record. The copy inside `tiny_stories_100m/` contains the same workflow next to the source modules.
+
+### Path configuration
+
+Use repository-root-based paths rather than paths relative to a particular Python file:
+
+```python
+from pathlib import Path
+
+REPO_ROOT = Path.cwd()
+IMPLEMENTATION_DIR = REPO_ROOT / "tiny_stories_100m"
+OUTPUT_DIR = REPO_ROOT / "outputs"
+DATA_DIR = REPO_ROOT / "data"
+CHECKPOINT_DIR = REPO_ROOT / "checkpoints"
+
+TOKENIZER_PATH = REPO_ROOT / "tinystories_tokenizer.json"
+
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+```
+
+If the tokenizer is loaded from the copy inside the implementation folder instead, use:
+
+```python
+TOKENIZER_PATH = (
+    REPO_ROOT
+    / "tiny_stories_100m"
+    / "tinystories_tokenizer.json"
+)
+```
+
+Both tokenizer copies must remain byte-for-byte identical because tokenized data and checkpoints depend on the exact token-to-ID mapping.
 
 ### Quick smoke run
 
@@ -620,7 +763,7 @@ QUICK_RUN = False
 RESUME_FROM_LATEST = False
 ```
 
-The main configuration becomes:
+The main configuration is:
 
 ```python
 TRAIN_TOKEN_BUDGET = 100_000_000
@@ -630,7 +773,7 @@ EVAL_BATCHES = 200
 CHECKPOINT_FREQUENCY = 1_000
 ```
 
-Restart the notebook kernel before beginning the clean run.
+Restart the notebook kernel before beginning a clean training run. This prevents an old model, optimizer, or loaded checkpoint from remaining in notebook memory.
 
 ### Resume an interrupted run
 
@@ -641,44 +784,75 @@ QUICK_RUN = False
 RESUME_FROM_LATEST = True
 ```
 
-The notebook loads:
+The training loop loads the latest resumable checkpoint from the configured checkpoint directory. A typical path is:
 
 ```text
 checkpoints/tinystories_100m/latest.pt
 ```
 
-Do not resume a 100M run from a checkpoint trained with a scheduler configured for a different total number of steps unless that change is deliberate.
+Do not resume a run with a learning-rate scheduler configured for a different total number of optimizer steps unless that change is deliberate.
+
+### Generated files
+
+The training workflow creates local files such as:
+
+```text
+data/tinystories_train_100000000.bin
+data/tinystories_validation_1000000.bin
+checkpoints/tinystories_100m/best.pt
+checkpoints/tinystories_100m/latest.pt
+```
+
+These large files should remain ignored by Git. The smaller final metrics, plots, and selected inference artifacts belong in the root `outputs/` folder.
 
 ---
 
 ## Loading the trained model
 
+The root `SavedModelExperiments.ipynb` shows the saved-model workflow and its outputs. The implementation folder contains a second copy next to the source modules.
+
 The lightweight inference artifact contains:
 
-- model state dictionary;
+- the model state dictionary;
 - model configuration;
 - tokenizer filename;
 - optimizer step;
 - tokens seen;
-- best periodic validation loss.
+- best recorded validation loss.
 
 ```python
 from pathlib import Path
+import sys
 
 import torch
 from tokenizers import Tokenizer
 
-from gptModel import (
+REPO_ROOT = Path.cwd()
+IMPLEMENTATION_DIR = REPO_ROOT / "tiny_stories_100m"
+
+if str(IMPLEMENTATION_DIR) not in sys.path:
+    sys.path.insert(0, str(IMPLEMENTATION_DIR))
+
+from tiny_stories_100m.gptModel import (
     GPTModel,
     generate,
     text_to_token_ids,
     token_ids_to_text,
 )
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device(
+    "cuda" if torch.cuda.is_available() else "cpu"
+)
 
-artifact_path = Path("outputs/tinystories_100m_best_model.pt")
-tokenizer_path = Path("tinystories_tokenizer.json")
+artifact_path = (
+    REPO_ROOT
+    / "outputs"
+    / "tinystories_100m_best_model.pt"
+)
+tokenizer_path = (
+    REPO_ROOT
+    / "tinystories_tokenizer.json"
+)
 
 artifact = torch.load(
     artifact_path,
@@ -728,31 +902,48 @@ print(
 | Balanced | 0.8 | 40 | recommended demonstration setting |
 | Creative | 1.0 | 50 | more varied, more errors |
 
-Generation settings affect output quality without changing model weights.
+Generation settings affect token selection without changing model weights.
 
 ---
 
 ## Evaluating the model
 
-The periodic metric used 200 validation batches. To evaluate the best checkpoint over the complete 1M-token validation file:
+The periodic training metric used 200 validation batches. To evaluate the best training checkpoint over the complete 1M-token validation file:
 
 ```python
 import math
 from pathlib import Path
+import sys
 
 import torch
 
-from dataSet import create_dataloader
-from gptModel import GPTModel, TINYSTORIES_CONFIG_29M
-from train_model import evaluate_model
+REPO_ROOT = Path.cwd()
+IMPLEMENTATION_DIR = REPO_ROOT / "tiny_stories_100m"
 
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+if str(IMPLEMENTATION_DIR) not in sys.path:
+    sys.path.insert(0, str(IMPLEMENTATION_DIR))
 
-checkpoint_path = Path(
-    "checkpoints/tinystories_100m/best.pt"
+from tiny_stories_100m.dataSet import create_dataloader
+from tiny_stories_100m.gptModel import (
+    GPTModel,
+    TINYSTORIES_CONFIG_29M,
 )
-validation_file = Path(
-    "data/tinystories_validation_1000000.bin"
+from tiny_stories_100m.train_model import evaluate_model
+
+device = torch.device(
+    "cuda" if torch.cuda.is_available() else "cpu"
+)
+
+checkpoint_path = (
+    REPO_ROOT
+    / "checkpoints"
+    / "tinystories_100m"
+    / "best.pt"
+)
+validation_file = (
+    REPO_ROOT
+    / "data"
+    / "tinystories_validation_1000000.bin"
 )
 
 checkpoint = torch.load(
@@ -784,10 +975,13 @@ full_validation_loss = evaluate_model(
 )
 
 print(f"Full validation loss: {full_validation_loss:.4f}")
-print(f"Full validation perplexity: {math.exp(full_validation_loss):.2f}")
+print(
+    "Full validation perplexity:",
+    f"{math.exp(full_validation_loss):.2f}",
+)
 ```
 
-For meaningful model comparisons, keep the following identical:
+For meaningful comparisons, keep the following identical:
 
 - tokenizer;
 - validation token file;
@@ -795,6 +989,8 @@ For meaningful model comparisons, keep the following identical:
 - selected checkpoint policy;
 - evaluation precision;
 - number of evaluated batches.
+
+The root notebooks preserve the reported experiment outputs, while the implementation folder contains the code required to reproduce them.
 
 ---
 
