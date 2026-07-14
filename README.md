@@ -541,12 +541,6 @@ Transformer/
 └── .gitignore
 ```
 
-### Why the notebooks appear twice
-
-The two root notebooks are intentionally kept at the top level so GitHub visitors can immediately inspect the recorded outputs, loss values, plots, and generations.
-
-Copies inside `tiny_stories_100m/` keep the complete implementation together for users who clone the repository and want to run the experiment. When either notebook is changed, both copies should be updated in the same commit so they do not drift apart.
-
 ### Import behavior
 
 The root notebooks import modules through the implementation folder, for example:
