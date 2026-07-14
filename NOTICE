@@ -1,0 +1,12 @@
+TinyStories GPT
+Copyright 2026 Abhinav Neupane
+
+This product includes original educational source code for training a
+decoder-only Transformer.
+
+The project interfaces with the TinyStories dataset by Ronen Eldan and
+Yuanzhi Li. TinyStories is not included in this software distribution.
+Its dataset card lists CDLA-Sharing-1.0:
+https://huggingface.co/datasets/roneneldan/TinyStories
+
+This NOTICE file is informational and does not modify the Apache License 2.0.
